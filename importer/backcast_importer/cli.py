@@ -25,6 +25,13 @@ def build_parser() -> argparse.ArgumentParser:
         help="Output directory for coverage.duckdb and Parquet files (default: /data).",
     )
     parser.add_argument(
+        "-n", "--name", default=None,
+        help=(
+            "Project id. Writes the dataset to <out>/<name> and updates the "
+            "top-level projects.json index. Omit for the legacy flat layout."
+        ),
+    )
+    parser.add_argument(
         "--prefix-strip", default="auto",
         help=(
             "Comma separated list of path prefixes to strip (e.g. '/src,/app'), "
@@ -69,6 +76,7 @@ def main(argv: list[str] | None = None) -> int:
             args.out,
             strip=_parse_strip(args.prefix_strip),
             include_gaps=not args.skip_gaps,
+            project=args.name,
         )
     except Exception as exc:  # noqa: BLE001 - surface a clean CLI error
         log.error("%s", exc)
@@ -76,6 +84,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.verify:
         print(
+            f"project={meta.get('project') or '-'}, "
             f"{meta['commit_count']} commits, {meta['coverage_records']} records, "
             f"statuses={meta['statuses']}, suites={meta['suites']}, "
             f"stripped={meta['prefix_stripped']}"

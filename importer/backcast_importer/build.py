@@ -12,6 +12,7 @@ import pyarrow as pa
 
 from .discover import CommitScan, discover
 from .parser import parse_lcov
+from .projects import update_index, validate_name
 
 log = logging.getLogger("backcast.importer")
 
@@ -222,11 +223,17 @@ def _export(con: duckdb.DuckDBPyConnection, out: Path) -> None:
 
 
 def _write_meta(
-    out: Path, commits: list[CommitScan], suite_names: list[str], stripped: str | None, records: int
+    out: Path,
+    commits: list[CommitScan],
+    suite_names: list[str],
+    stripped: str | None,
+    records: int,
+    project: str | None,
 ) -> None:
     timestamps = [c.ts for c in commits]
     meta = {
         "generated_at": int(time.time()),
+        "project": project,
         "commit_count": len(commits),
         "coverage_records": records,
         "suites": suite_names,
@@ -247,9 +254,20 @@ def build(
     strip: list[str] | None = None,
     include_gaps: bool = True,
     db_name: str = "coverage.duckdb",
+    project: str | None = None,
 ) -> dict:
-    """Run the full import. Returns the metadata dict written to ``meta.json``."""
-    out = Path(out)
+    """Run the full import. Returns the metadata dict written to ``meta.json``.
+
+    When ``project`` is given the dataset is written to ``<out>/<project>`` and
+    the top-level ``projects.json`` index is updated, enabling multiple
+    independent projects under one data directory.
+    """
+    data_dir = Path(out)
+    if project is not None:
+        project = validate_name(project)
+        out = data_dir / project
+    else:
+        out = data_dir
     out.mkdir(parents=True, exist_ok=True)
 
     log.info("discovering runs in %s", root)
@@ -278,13 +296,29 @@ def build(
         suite_names = sorted(
             {s.name for c in commits for s in c.suites.values()}
         )
-        _write_meta(out, commits, suite_names, stripped, records)
+        _write_meta(out, commits, suite_names, stripped, records, project)
     finally:
         con.close()
 
     meta = json.loads((out / "meta.json").read_text(encoding="utf-8"))
+    if project is not None:
+        update_index(
+            data_dir,
+            {
+                "id": project,
+                "label": project,
+                "commit_count": meta["commit_count"],
+                "coverage_records": meta["coverage_records"],
+                "suites": meta["suites"],
+                "prefix_stripped": meta["prefix_stripped"],
+                "first_ts": meta["first_ts"],
+                "last_ts": meta["last_ts"],
+                "generated_at": meta["generated_at"],
+            },
+        )
     log.info(
-        "done: %d commits, %d records, suite(s)=%s, stripped=%s",
+        "done: project=%s, %d commits, %d records, suite(s)=%s, stripped=%s",
+        project or "-",
         meta["commit_count"],
         meta["coverage_records"],
         meta["suites"],

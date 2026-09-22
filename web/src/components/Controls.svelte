@@ -10,6 +10,20 @@
 </script>
 
 <div class="controls">
+  {#if ui.projects.length > 1}
+    <label class="group">
+      <span>project</span>
+      <select
+        value={ui.projectId}
+        onchange={(event) => ui.switchProject((event.currentTarget as HTMLSelectElement).value)}
+      >
+        {#each ui.projects as project (project.id)}
+          <option value={project.id}>{project.label}</option>
+        {/each}
+      </select>
+    </label>
+  {/if}
+
   <div class="group transport">
     <button title="First" onclick={() => ui.goTo(0)}>⏮</button>
     <button title="Previous commit" onclick={() => ui.step(-1)}>◀</button>

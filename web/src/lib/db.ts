@@ -1,6 +1,13 @@
-import type { CommitMeta, CoverageRow, DatasetMeta, TimelinePoint } from './types';
+import type {
+  CommitMeta,
+  CoverageRow,
+  DatasetMeta,
+  ProjectIndex,
+  ProjectInfo,
+  TimelinePoint,
+} from './types';
 
-const DATA_BASE: string = (import.meta.env.VITE_DATA_BASE as string | undefined) ?? '/data';
+export const DATA_BASE: string = (import.meta.env.VITE_DATA_BASE as string | undefined) ?? '/data';
 
 const PARQUET_FILES = ['commits.parquet', 'commit_suites.parquet', 'summary.parquet', 'coverage.parquet'];
 
@@ -16,8 +23,10 @@ export class CoverageDB {
   private cache = new Map<string, CoverageRow[]>();
   private cacheLimit = 48;
   private meta: DatasetMeta | null = null;
+  private base: string;
 
-  constructor() {
+  constructor(dataBase: string = DATA_BASE) {
+    this.base = dataBase.replace(/\/+$/, '') || DATA_BASE;
     this.worker = new Worker(new URL('./duckdb.worker.ts', import.meta.url), { type: 'module' });
     this.worker.onmessage = (event: MessageEvent<{ id: number; ok: boolean; result?: unknown; error?: string }>) => {
       const { id, ok, result, error } = event.data;
@@ -42,7 +51,7 @@ export class CoverageDB {
   }
 
   get dataBase(): string {
-    return DATA_BASE;
+    return this.base;
   }
 
   get datasetMeta(): DatasetMeta | null {
@@ -53,12 +62,12 @@ export class CoverageDB {
     if (!this.ready) {
       this.ready = (async () => {
         await this.rpc({ type: 'init' });
-        await this.rpc({ type: 'load', dataBase: DATA_BASE, files: PARQUET_FILES });
+        await this.rpc({ type: 'load', dataBase: this.base, files: PARQUET_FILES });
       })();
     }
     await this.ready;
     if (!this.meta) {
-      const response = await fetch(`${DATA_BASE}/meta.json`);
+      const response = await fetch(`${this.base}/meta.json`);
       this.meta = (await response.json()) as DatasetMeta;
     }
     return this.meta;
@@ -131,5 +140,32 @@ export class CoverageDB {
 
   destroy(): void {
     this.worker.terminate();
+  }
+}
+
+/** Data base URL for a project id (empty id = legacy flat layout). */
+export function projectBase(id: string): string {
+  const root = DATA_BASE.replace(/\/+$/, '');
+  return id ? `${root}/${id}` : root;
+}
+
+const DEFAULT_PROJECT: ProjectInfo = { id: '', label: 'default' };
+
+/**
+ * Fetch the top-level projects index. Falls back to a single synthetic
+ * "default" project when `projects.json` is absent, so existing flat
+ * data directories keep working.
+ */
+export async function fetchProjects(): Promise<ProjectInfo[]> {
+  try {
+    const response = await fetch(`${DATA_BASE.replace(/\/+$/, '')}/projects.json`);
+    if (!response.ok) return [DEFAULT_PROJECT];
+    const payload = (await response.json()) as ProjectIndex;
+    const projects = Array.isArray(payload?.projects)
+      ? payload.projects.filter((p): p is ProjectInfo => !!p && typeof p.id === 'string')
+      : [];
+    return projects.length ? projects : [DEFAULT_PROJECT];
+  } catch {
+    return [DEFAULT_PROJECT];
   }
 }

@@ -136,5 +136,59 @@ class BuildTest(unittest.TestCase):
             self.assertEqual(meta["commit_count"], 1)
 
 
+class ProjectTest(unittest.TestCase):
+    def test_project_layout_and_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "coverage"
+            out = Path(tmp) / "data"
+            root.mkdir()
+            write_run(root, "1000_aa", {"unit": (LCOV_MAIN, 0)})
+
+            meta = build(root, out, strip=None, project="alpha")
+            self.assertEqual(meta["project"], "alpha")
+            self.assertTrue((out / "alpha" / "coverage.parquet").is_file())
+            self.assertTrue((out / "alpha" / "meta.json").is_file())
+            self.assertFalse((out / "coverage.parquet").exists())
+
+            index = json.loads((out / "projects.json").read_text(encoding="utf-8"))
+            self.assertEqual([p["id"] for p in index["projects"]], ["alpha"])
+            self.assertEqual(index["projects"][0]["commit_count"], 1)
+            self.assertEqual(index["projects"][0]["suites"], ["unit"])
+
+    def test_index_accumulates_and_is_idempotent(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "coverage"
+            out = Path(tmp) / "data"
+            root.mkdir()
+            write_run(root, "1000_aa", {"unit": (LCOV_MAIN, 0)})
+
+            build(root, out, strip=None, project="beta")
+            build(root, out, strip=None, project="alpha")
+            build(root, out, strip=None, project="alpha")
+
+            index = json.loads((out / "projects.json").read_text(encoding="utf-8"))
+            self.assertEqual([p["id"] for p in index["projects"]], ["alpha", "beta"])
+
+    def test_invalid_project_name(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "coverage"
+            out = Path(tmp) / "data"
+            root.mkdir()
+            write_run(root, "1000_aa", {"unit": (LCOV_MAIN, 0)})
+            with self.assertRaises(ValueError):
+                build(root, out, strip=None, project="../evil")
+
+    def test_flat_layout_leaves_no_index(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "coverage"
+            out = Path(tmp) / "data"
+            root.mkdir()
+            write_run(root, "1000_aa", {"unit": (LCOV_MAIN, 0)})
+            meta = build(root, out, strip=None)
+            self.assertIsNone(meta["project"])
+            self.assertTrue((out / "coverage.parquet").is_file())
+            self.assertFalse((out / "projects.json").exists())
+
+
 if __name__ == "__main__":
     unittest.main()

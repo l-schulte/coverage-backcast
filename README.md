@@ -25,12 +25,14 @@ coverage/
         │  importer (Python, offline, one-shot)
         ▼
 data/
-  coverage.parquet         # one row per (commit, suite, file)
-  commits.parquet          # commit metadata + status
-  commit_suites.parquet    # suite exit codes per commit
-  summary.parquet          # per-commit / per-suite totals
-  meta.json
-  coverage.duckdb          # same data, for ad-hoc SQL
+  projects.json            # index of projects (multi-project mode)
+  <project>/
+    coverage.parquet       # one row per (commit, suite, file)
+    commits.parquet        # commit metadata + status
+    commit_suites.parquet  # suite exit codes per commit
+    summary.parquet        # per-commit / per-suite totals
+    meta.json
+    coverage.duckdb        # same data, for ad-hoc SQL
 
         │  static SPA (Svelte + D3 + DuckDB-WASM)
         ▼
@@ -75,6 +77,10 @@ The dev server mounts `./data` at `/data` automatically.
 # import once (writes ./data)
 podman compose run --rm importer
 
+# import a named project (organise sources as ./coverage/<project>)
+podman compose run --rm importer \
+  --coverage /coverage/frontend --out /data --name frontend
+
 # production build: static SPA + data on nginx
 podman compose up -d web           # http://localhost:8080
 
@@ -97,6 +103,7 @@ python -m backcast_importer -c <coverage dir> -o <out dir> [options]
 
   -c, --coverage      root directory with timestamp_commitsha run folders
   -o, --out           output directory (default /data)
+  -n, --name          project id; writes to <out>/<name> and updates projects.json
       --prefix-strip  'auto' (default) | 'none' | comma-separated prefixes
       --skip-gaps     omit error / not_applicable commits
       --verify        print a summary after import
@@ -104,6 +111,21 @@ python -m backcast_importer -c <coverage dir> -o <out dir> [options]
 
 The importer streams every `.lcov` file, so 6k+ runs / multi-GB inputs import
 in minutes. It is idempotent — rerunning replaces the database.
+
+### Multiple projects
+
+Pass `--name` to write a self-contained dataset to `data/<name>/` and record it
+in `data/projects.json`. Run the importer once per project; each run adds or
+replaces its own entry in the index:
+
+```bash
+python -m backcast_importer -c ./coverage/frontend -o ./data --name frontend
+python -m backcast_importer -c ./coverage/backend  -o ./data --name backend
+```
+
+Omitting `--name` keeps the original flat layout (files directly in `-o`). The
+web app auto-detects that layout when `projects.json` is missing, so existing
+datasets keep working unchanged.
 
 ## Web app
 
@@ -118,6 +140,10 @@ in minutes. It is idempotent — rerunning replaces the database.
 - **Suite selector** = one suite at a time, or `combined (approx.)`, which
   merges suites with `max(hits)` per file (exact union of hit lines is not
   recoverable from file-level aggregates).
+- **Project selector** = when `data/projects.json` lists more than one project,
+  a dropdown switches between them. The choice is stored in the URL hash
+  (`#project=<id>`) so links are shareable; with a single project (or the legacy
+  flat layout) the selector is hidden.
 
 Configuration: set `VITE_DATA_BASE` to point at a non-default data path
 (default `/data`).

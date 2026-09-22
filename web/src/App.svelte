@@ -22,14 +22,20 @@
 
   onMount(() => {
     void ui.init();
+    const onHash = () => {
+      const id = new URLSearchParams(window.location.hash.replace(/^#/, '')).get('project') ?? '';
+      if (id && id !== ui.projectId) void ui.switchProject(id);
+    };
+    window.addEventListener('hashchange', onHash);
+    return () => window.removeEventListener('hashchange', onHash);
   });
 
   // Load coverage for the current commit (and the previous one for deltas).
   $effect(() => {
+    const token = ++loadToken;
     const commit = ui.commit;
     const suite = ui.suite;
     if (!commit || ui.status !== 'ready') return;
-    const token = ++loadToken;
     const prev = ui.commits[ui.current - 1];
 
     void (async () => {
@@ -149,6 +155,7 @@
     <div class="spacer"></div>
     {#if ui.meta}
       <div class="meta">
+        {#if ui.projects.length > 1 && ui.project}{ui.project.label} · {/if}
         {ui.meta.commit_count} commits · {ui.meta.suites.join(', ')} · stripped
         {ui.meta.prefix_stripped ?? 'none'}
       </div>

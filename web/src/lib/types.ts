@@ -34,6 +34,7 @@ export interface TimelinePoint {
 
 export interface DatasetMeta {
   generated_at: number;
+  project: string | null;
   commit_count: number;
   coverage_records: number;
   suites: string[];
@@ -41,6 +42,22 @@ export interface DatasetMeta {
   prefix_stripped: string | null;
   first_ts: number | null;
   last_ts: number | null;
+}
+
+export interface ProjectInfo {
+  id: string;
+  label: string;
+  commit_count?: number;
+  coverage_records?: number;
+  suites?: string[];
+  prefix_stripped?: string | null;
+  first_ts?: number | null;
+  last_ts?: number | null;
+  generated_at?: number;
+}
+
+export interface ProjectIndex {
+  projects: ProjectInfo[];
 }
 
 export type ColorMetric = 'lines' | 'branches' | 'functions';
