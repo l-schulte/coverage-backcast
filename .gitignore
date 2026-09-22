@@ -1,0 +1,16 @@
+# generated data
+/data/
+/coverage/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+*.egg-info/
+
+# node
+node_modules/
+web/dist/
+web/.svelte-kit/
+web/public/duckdb/
+.DS_Store

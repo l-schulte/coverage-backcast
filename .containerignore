@@ -1,0 +1,10 @@
+# build context exclusions (podman)
+.git/
+data/
+coverage/
+importer/.venv/
+importer/**/__pycache__/
+web/node_modules/
+web/dist/
+web/public/duckdb/
+web/.svelte-kit/

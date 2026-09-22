@@ -1,0 +1,40 @@
+services:
+  # One-shot importer: reads ./coverage, writes ./data (DuckDB + Parquet).
+  importer:
+    build:
+      context: .
+      dockerfile: containerfiles/importer.Containerfile
+    volumes:
+      - ./coverage:/coverage:ro,z
+      - ./data:/data:z
+    command: ["--coverage", "/coverage", "--out", "/data", "--prefix-strip", "auto"]
+
+  # Production: static SPA + generated data, served by nginx.
+  web:
+    build:
+      context: .
+      dockerfile: containerfiles/web.Containerfile
+    ports:
+      - "8080:80"
+    volumes:
+      - ./data:/data:ro,z
+    depends_on:
+      - importer
+
+  # Development: Vite dev server with HMR.
+  dev:
+    profiles: ["dev"]
+    build:
+      context: .
+      dockerfile: containerfiles/dev.Containerfile
+    ports:
+      - "5173:5173"
+    volumes:
+      - ./web:/app:z
+      - ./data:/data:ro,z
+      - web_node_modules:/app/node_modules
+    command:
+      ["sh", "-lc", "npm install && npm run dev -- --host 0.0.0.0 --port 5173"]
+
+volumes:
+  web_node_modules:
